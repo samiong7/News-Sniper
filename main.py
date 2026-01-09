@@ -8,13 +8,19 @@ from datetime import datetime
 from deep_translator import GoogleTranslator
 
 # ==========================================
-# 🔐 إعدادات تيليجرام (تمت تعبئتها ببياناتك)
+# 🔐 إعدادات تيليجرام الآمنة (يقرأ من Secrets)
 # ==========================================
-TELEGRAM_TOKEN = "8402103870:AAH2UwK5n9_IF14DFmOoRqq__UnnHT1C_4w"
-TELEGRAM_CHANNEL_ID = "@news_live_fx" 
+# محاولة جلب البيانات من الخزنة السرية، وإذا لم توجد نتركها فارغة لتجنب الخطأ
+try:
+    TELEGRAM_TOKEN = st.secrets["TELEGRAM_TOKEN"]
+    TELEGRAM_CHANNEL_ID = st.secrets["TELEGRAM_CHANNEL_ID"]
+except:
+    TELEGRAM_TOKEN = ""
+    TELEGRAM_CHANNEL_ID = ""
 
 # دالة إرسال الرسالة
 def send_telegram_msg(message):
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHANNEL_ID: return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     params = {"chat_id": TELEGRAM_CHANNEL_ID, "text": message, "parse_mode": "Markdown"}
     try:
@@ -43,8 +49,12 @@ with st.sidebar:
     if st.button("🔄 تحديث البيانات"):
         st.rerun()
     
+    # رسالة حالة الاتصال بتيليجرام
     if telegram_on:
-        st.success(f"البث مفعل للقناة: {TELEGRAM_CHANNEL_ID}")
+        if TELEGRAM_TOKEN:
+            st.success(f"متصل بالقناة: {TELEGRAM_CHANNEL_ID}")
+        else:
+            st.error("خطأ: لم يتم العثور على التوكن في Secrets!")
 
 # 2. الأصول
 assets_config = {
@@ -123,21 +133,19 @@ for name, info in assets_config.items():
             
             # --- منطق الإرسال لتيليجرام ---
             if telegram_on and is_new_news:
-                ar_title_tg = get_translation(entry.title)
-                
-                # شكل الرسالة في القناة
-                msg_body = (
-                    f"🚨 *{vip_badge} خبر جديد: {name}*\n\n"
-                    f"📰 {ar_title_tg}\n\n"
-                    f"💰 السعر الحالي: {current_price}\n"
-                    f"📢 المصدر: {source}"
-                )
-                
-                send_telegram_msg(msg_body)
-                st.session_state['sent_news_ids'].append(entry.title)
-                # نحفظ آخر 100 خبر فقط لتخفيف الذاكرة
-                if len(st.session_state['sent_news_ids']) > 100:
-                    st.session_state['sent_news_ids'].pop(0)
+                # نتحقق من وجود التوكن أولاً
+                if TELEGRAM_TOKEN:
+                    ar_title_tg = get_translation(entry.title)
+                    msg_body = (
+                        f"🚨 *{vip_badge} خبر جديد: {name}*\n\n"
+                        f"📰 {ar_title_tg}\n\n"
+                        f"💰 السعر الحالي: {current_price}\n"
+                        f"📢 المصدر: {source}"
+                    )
+                    send_telegram_msg(msg_body)
+                    st.session_state['sent_news_ids'].append(entry.title)
+                    if len(st.session_state['sent_news_ids']) > 100:
+                        st.session_state['sent_news_ids'].pop(0)
 
             # تجهيز العرض
             ar_title_display = get_translation(entry.title)
