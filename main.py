@@ -8,75 +8,74 @@ from datetime import datetime
 from deep_translator import GoogleTranslator
 
 # ==========================================
-# 🔐 إعدادات تيليجرام الآمنة (يقرأ من Secrets)
+# 🔐 إعدادات تيليجرام الآمنة (من الخزنة السرية)
 # ==========================================
-# محاولة جلب البيانات من الخزنة السرية، وإذا لم توجد نتركها فارغة لتجنب الخطأ
 try:
     TELEGRAM_TOKEN = st.secrets["TELEGRAM_TOKEN"]
     TELEGRAM_CHANNEL_ID = st.secrets["TELEGRAM_CHANNEL_ID"]
 except:
+    # قيم فارغة في حال عدم وجود الخزنة لتجنب توقف الموقع
     TELEGRAM_TOKEN = ""
     TELEGRAM_CHANNEL_ID = ""
 
-# دالة إرسال الرسالة
+# دالة إرسال الرسالة (مختصرة لرؤوس الأقلام)
 def send_telegram_msg(message):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHANNEL_ID: return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    params = {"chat_id": TELEGRAM_CHANNEL_ID, "text": message, "parse_mode": "Markdown"}
+    params = {"chat_id": TELEGRAM_CHANNEL_ID, "text": message, "parse_mode": "Markdown", "disable_web_page_preview": True}
     try:
-        requests.get(url, params=params)
+        requests.get(url, params=params, timeout=5)
     except: pass
 # ==========================================
 
 # 1. إعدادات الصفحة
-st.set_page_config(page_title="News Sniper 📡", layout="wide")
-st.title("News Sniper 📡 - غرفة البث المباشر")
+st.set_page_config(page_title="News Live FX 💎", layout="wide")
+st.title("News Live FX 💎 - غرفة الأخبار الحصرية")
 
 # --- تهيئة الذاكرة ---
-if 'last_vip_news' not in st.session_state:
-    st.session_state['last_vip_news'] = []
 if 'sent_news_ids' not in st.session_state:
     st.session_state['sent_news_ids'] = []
 
 # --- القائمة الجانبية ---
 with st.sidebar:
     st.header("⚙️ الإعدادات")
-    auto_refresh = st.checkbox("⏰ تحديث تلقائي", value=True)
-    sound_alert = st.checkbox("🔔 تنبيه صوتي (VIP)", value=True)
+    st.caption("نسخة النخبة: Bloomberg & Reuters Only")
+    
+    auto_refresh = st.checkbox("⏰ تحديث تلقائي (دقيقة)", value=True)
+    sound_alert = st.checkbox("🔔 تنبيه صوتي", value=True)
     telegram_on = st.checkbox("✈️ إرسال للقناة الآلية", value=False)
-    vip_only = st.checkbox("⭐ مصادر VIP فقط", value=False)
     
     if st.button("🔄 تحديث البيانات"):
         st.rerun()
     
-    # رسالة حالة الاتصال بتيليجرام
+    # حالة الاتصال
     if telegram_on:
         if TELEGRAM_TOKEN:
             st.success(f"متصل بالقناة: {TELEGRAM_CHANNEL_ID}")
         else:
-            st.error("خطأ: لم يتم العثور على التوكن في Secrets!")
+            st.error("خطأ: التوكن غير موجود في Secrets!")
 
-# 2. الأصول
+# 2. الأصول (تم تعديل البحث ليكون دقيقاً)
 assets_config = {
-    "EUR/USD": {"symbol": "EURUSD=X", "query": "EURUSD forex trading"},
-    "GBP/USD": {"symbol": "GBPUSD=X", "query": "GBPUSD currency"},
-    "Gold (XAU)": {"symbol": "GC=F", "query": "Gold price commodity"},
-    "Oil (WTI)": {"symbol": "CL=F", "query": "Crude Oil WTI price"},
-    "Bitcoin": {"symbol": "BTC-USD", "query": "Bitcoin crypto currency"},
-    "Dow Jones": {"symbol": "YM=F", "query": "Dow Jones Industrial Average"},
-    "Nasdaq": {"symbol": "NQ=F", "query": "Nasdaq 100 stock market"}
+    "EUR/USD": {"symbol": "EURUSD=X", "query": "EURUSD"},
+    "GBP/USD": {"symbol": "GBPUSD=X", "query": "GBPUSD"},
+    "Gold (XAU)": {"symbol": "GC=F", "query": "Gold price"},
+    "Oil (WTI)": {"symbol": "CL=F", "query": "Crude Oil price"},
+    "Bitcoin": {"symbol": "BTC-USD", "query": "Bitcoin crypto"},
+    "US Markets": {"symbol": "^DJI", "query": "Stock Market US Economy"} # Dow Jones
 }
 
 # 3. دوال مساعدة
 def get_translation(text):
     try:
-        time.sleep(0.1)
         return GoogleTranslator(source='auto', target='ar').translate(text)
     except:
         return text
 
-def fetch_news_safe(query):
-    url = f"https://news.google.com/rss/search?q={query}+when:12h&hl=en-US&gl=US&ceid=US:en"
+def fetch_premium_news(query):
+    # الفلتر القوي: نضيف site:bloomberg.com OR site:reuters.com للبحث مباشرة
+    search_q = f"{query} (site:bloomberg.com OR site:reuters.com)"
+    url = f"https://news.google.com/rss/search?q={search_q}+when:6h&hl=en-US&gl=US&ceid=US:en"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     try:
         response = requests.get(url, headers=headers, timeout=5)
@@ -95,7 +94,7 @@ idx = 0
 for name, info in assets_config.items():
     try:
         ticker = yf.Ticker(info['symbol'])
-        df = ticker.history(period="1d", interval="5m")
+        df = ticker.history(period="1d", interval="15m") # فاصل أكبر قليلاً للسرعة
         if not df.empty:
             curr = df['Close'].iloc[-1]
             change = ((curr - df['Open'].iloc[0]) / df['Open'].iloc[0]) * 100
@@ -109,45 +108,53 @@ for name, info in assets_config.items():
     price_bar.progress(int((idx / len(assets_config)) * 100))
 price_bar.empty()
 
-# الخطوة 2: الأخبار + البث
-news_bar = st.progress(0, text="جاري جلب الأخبار...")
+# الخطوة 2: الأخبار الحصرية + البث
+news_bar = st.progress(0, text="جاري البحث في رويترز وبلومبيرج...")
 idx = 0
-new_vip_found = False
+new_news_found = False
 
 for name, info in assets_config.items():
-    feed = fetch_news_safe(info['query'])
+    feed = fetch_premium_news(info['query'])
     
     if feed and len(feed.entries) > 0:
-        for entry in feed.entries[:2]:
-            source = entry.source.title if hasattr(entry, 'source') else "Unknown"
-            is_vip = any(x in source for x in ["Bloomberg", "Reuters", "CNBC", "Financial", "Yahoo", "Investing"])
+        for entry in feed.entries[:2]: # نأخذ أحدث خبرين فقط
             
-            if vip_only and not is_vip: continue
+            # فلتر إضافي للتأكد 100%
+            source = entry.source.title if hasattr(entry, 'source') else ""
+            is_bloomberg = "Bloomberg" in source
+            is_reuters = "Reuters" in source
+            
+            if not (is_bloomberg or is_reuters):
+                continue # تخطي أي خبر ليس منهما
 
-            vip_badge = "⭐ VIP" if is_vip else ""
+            # التجهيز
+            badge = "🟦" if is_bloomberg else "🟧"
             current_price = prices_cache.get(name, "---")
-            is_new_news = entry.title not in st.session_state['sent_news_ids']
+            is_new = entry.title not in st.session_state['sent_news_ids']
 
-            if is_vip and is_new_news:
-                new_vip_found = True
+            if is_new:
+                new_news_found = True
             
-            # --- منطق الإرسال لتيليجرام ---
-            if telegram_on and is_new_news:
-                # نتحقق من وجود التوكن أولاً
+            # --- الإرسال لتيليجرام (نمط رؤوس أقلام) ---
+            if telegram_on and is_new:
+                # نتحقق من التوكن
                 if TELEGRAM_TOKEN:
-                    ar_title_tg = get_translation(entry.title)
+                    ar_title = get_translation(entry.title)
+                    
+                    # الرسالة المختصرة
                     msg_body = (
-                        f"🚨 *{vip_badge} خبر جديد: {name}*\n\n"
-                        f"📰 {ar_title_tg}\n\n"
-                        f"💰 السعر الحالي: {current_price}\n"
-                        f"📢 المصدر: {source}"
+                        f"{badge} *{source}*\n"
+                        f"🔻 {ar_title}\n"
                     )
+                    
                     send_telegram_msg(msg_body)
                     st.session_state['sent_news_ids'].append(entry.title)
+                    
+                    # تنظيف الذاكرة
                     if len(st.session_state['sent_news_ids']) > 100:
                         st.session_state['sent_news_ids'].pop(0)
 
-            # تجهيز العرض
+            # --- التجهيز للعرض في الجدول ---
             ar_title_display = get_translation(entry.title)
             if hasattr(entry, 'published_parsed'):
                 pub_time = datetime(*entry.published_parsed[:6]).strftime("%H:%M")
@@ -160,9 +167,9 @@ for name, info in assets_config.items():
                 "time_obj": sort_time,
                 "التوقيت": pub_time,
                 "الأصل": name,
-                "السعر (Live)": current_price,
-                "المصدر": f"{vip_badge} {source}",
-                "الخبر (مترجم)": ar_title_display
+                "السعر": current_price,
+                "المصدر": f"{badge} {source}",
+                "الخبر": ar_title_display
             })
     
     idx += 1
@@ -171,26 +178,26 @@ for name, info in assets_config.items():
 news_bar.empty()
 
 # الصوت
-if sound_alert and new_vip_found:
+if sound_alert and new_news_found:
+    st.toast("خبر حصري جديد!", icon="💎")
     st.markdown("""<audio autoplay><source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg"></audio>""", unsafe_allow_html=True)
-    st.toast("خبر جديد وصل!", icon="🔔")
 
-# العرض
+# العرض النهائي
 if all_data:
     df = pd.DataFrame(all_data).sort_values(by="time_obj", ascending=False)
     st.dataframe(
         df.drop(columns=["time_obj"]),
         column_config={
             "الأصل": st.column_config.TextColumn("الأصل", width="small"),
-            "السعر (Live)": st.column_config.TextColumn("السعر", width="small"),
-            "الخبر (مترجم)": st.column_config.TextColumn("العنوان", width="large"),
+            "السعر": st.column_config.TextColumn("السعر", width="small"),
+            "الخبر": st.column_config.TextColumn("العنوان", width="large"),
             "المصدر": st.column_config.TextColumn("المصدر", width="medium"),
         },
         use_container_width=True,
         hide_index=True
     )
 else:
-    st.warning("جاري البحث...")
+    st.info("لا توجد أخبار حديثة من بلومبيرج أو رويترز في الساعات الماضية.")
 
 if auto_refresh:
     time.sleep(60)
